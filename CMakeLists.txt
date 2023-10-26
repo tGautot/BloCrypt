@@ -9,5 +9,5 @@ include_directories( ${OPENGL_INCLUDE_DIRS} )
 SET( GCC_COVERAGE_COMPILE_FLAGS "-Wwrite-strings" )
 set(CMAKE_BUILD_TYPE Debug)   
 
-add_executable( BloCrypt WIN32 src/AES.cpp src/main.cpp )
+add_executable( BloCrypt WIN32 src/KeyGen.cpp src/AES.cpp src/main.cpp )
 target_include_directories( BloCrypt PUBLIC ./include  )

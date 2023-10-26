@@ -4,13 +4,11 @@
 #include <sstream>
 
 #include "AES.hpp"
+#include "KeyGen.hpp"
 
 
 
 typedef struct {int stt, end;} Interval;
-
-unsigned char key[] = { 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f };
-
 
 void printArgHelp(){
     std::cout << "ArgHelp" << std::endl;
@@ -27,7 +25,7 @@ int main(int argc, char** argv){
      *      Key size for AES
      * 
      *  TODO
-     * --source-blocks -b expected format: [0-9]*-[0-9]*(:[0-9]*-[0-9])*
+     * --source-blocks -b expected format: [0-9]+-[0-9]+(:[0-9]+-[0-9]+)*
      *      Gives the offset in bytes from begining of inputfile for [start-end[ of data to encrypt
     */
 
@@ -46,18 +44,21 @@ int main(int argc, char** argv){
         {"decrypt",       0, NULL, 'd'},
         {"key-size",      1, NULL, 'k'},
         {"source-blocks", 1, NULL, 'b'},
-        {"key-file",      1, NULL, 'K'}, // TODO
+        {"key-file",      1, NULL, 'K'},
         {"block-file",    1, NULL, 'B'}
     };
-    const char *short_opt = "?df:k:b:";
+    const char *short_opt = "df:k:b:B:K:?";
+    char *keySourceFile = NULL;
     while ((c = getopt_long(argc, argv, short_opt, long_opt, NULL)) != -1){
-        std::cout << c << " -> " << optarg << std::endl;
         switch (c)  {
         case 'f':
             filePath = optarg;
             break;
         case 'k':
             keySize = atoi(optarg);
+            break;
+        case 'K':
+            keySourceFile = optarg;
             break;
         case 'd':
             operation = 1;
@@ -92,23 +93,41 @@ int main(int argc, char** argv){
         }
     }
 
-    std::cout << "Got " << blockCnt << " blocks" << std::endl;
-    for(int i = 0; i < blockCnt; i++){
-        std::cout << blocks[i].stt << "-" << blocks[i].end << std::endl;
-    }
+    if(blockFile.is_open()) blockFile.close();
 
     AES aes(keySize);
 
     // Check all blocks before encrypting
     for(int blk = 0; blk < blockCnt; blk++){
         int blkStt = blocks[blk].stt, blkEnd = blocks[blk].end;
-        if(blkEnd < blkStt) printf("Invalid block (end<start): %d-%d", blkStt, blkEnd);
-        if((blkEnd - blkStt)%16 != 0) printf("Invalid block, size must be multiple of 16 bytes: %d-%d", blkStt, blkEnd);
+        printf("Got block from %d to %d\n", blocks[blk].stt, blocks[blk].end);
+        if(blkEnd < blkStt) {
+            printf("Invalid block (end<start): %d-%d", blkStt, blkEnd);
+            exit(1);
+        }
+        if((blkEnd - blkStt)%16 != 0) {
+            printf("Invalid block, size must be multiple of 16 bytes: %d-%d", blkStt, blkEnd);
+            exit(1);
+        }
     }
+
 
     std::fstream file;
     file.open(filePath, std::ios::binary | std::ios::in | std::ios::out);
+    
+    KeyGen kgen(keySize, keySourceFile);
+    unsigned char* key = (unsigned char*) malloc(sizeof(char) * keySize/8);
+    bool saveKey = (operation == 0) && (keySourceFile == NULL || strcmp(keySourceFile, "") == 0);
+
+
+    std::ofstream keyFile;
+
+    if(saveKey){
+        keyFile.open("keys.store", std::ios::binary | std::ios::out);
+    }
+
     for(int blk = 0; blk < blockCnt; blk++){
+        printf("Encrypting block %d of %d\n", blk+1, blockCnt); fflush(stdout);
         int blkStt = blocks[blk].stt, blkEnd = blocks[blk].end;
         int blkSz = blkEnd - blkStt;
         unsigned char fData[blkSz];
@@ -117,13 +136,28 @@ int main(int argc, char** argv){
         file.read((char*)fData, blkSz*sizeof(char));
         
         unsigned char* encData;
+        kgen.genNextKey(key);
         encData = (operation == 0) ? aes.EncryptECB(fData, blkSz, key) : aes.DecryptECB(fData, blkSz, key);
+
+        if(saveKey) {
+            keyFile.write((const char*)key, sizeof(char) * keySize/8);
+        }
 
         file.seekp(blkStt, std::ios::beg);
         file.write((char*)encData, blkSz*sizeof(char));
     }
 
-
+    file.close();
+    if(saveKey) {
+        keyFile.close();
+        printf("============================================\n");
+        printf("THE KEYS USED TO ENCRYPT YOUR DATA HAVE BEEN\n");
+        printf("SAVED TO THE FILE \"keys.store\" DON'T LOSE IT\n");
+        printf("============================================\n");
+        fflush(stdout);
+    }
+    free(key);
+    free(blocks);
 
 
 }

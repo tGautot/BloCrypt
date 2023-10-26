@@ -11,6 +11,6 @@ class KeyGen {
         KeyGen(int key_size);
         KeyGen(int key_size, char* srcPath);
 
-        void getKey(unsigned char* dest);
+        void genNextKey(unsigned char* dest);
 
-}
+};
