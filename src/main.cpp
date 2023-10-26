@@ -18,15 +18,22 @@ int main(int argc, char** argv){
     /**
      * Arguments that can be given:
      * 
+     * --decrypt -d do decryption instead of encryption
+     * 
      * --file -f PATH
      *      Path to file to encrypt
      * 
      * --key-size -k (128 | 192 | 256)
      *      Key size for AES
      * 
-     *  TODO
      * --source-blocks -b expected format: [0-9]+-[0-9]+(:[0-9]+-[0-9]+)*
      *      Gives the offset in bytes from begining of inputfile for [start-end[ of data to encrypt
+     * 
+     * --key-file -K path_to_file 
+     *      Gives path to file containing keys needed for decryption
+     * 
+     * --block-file -B path_to_file
+     *      Give path to file containing description of blocks (same regex as -b)
     */
 
     char* filePath;
