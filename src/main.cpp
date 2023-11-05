@@ -3,16 +3,56 @@
 #include <fstream>
 #include <sstream>
 
+#ifdef WIN32
+#include <windows.h>
+#else
+#include <termios.h>
+#include <unistd.h>
+#endif
+
+
 #include "AES.hpp"
 #include "KeyGen.hpp"
 
 
+#define OP_ENCR 0
+#define OP_DECR 1
 
 typedef struct {int stt, end;} Interval;
 
 void printArgHelp(){
     std::cout << "ArgHelp" << std::endl;
 }
+
+
+// From
+// https://stackoverflow.com/questions/1413445/reading-a-password-from-stdcin
+void setStdinEcho(bool enable = true)
+{
+#ifdef WIN32
+    HANDLE hStdin = GetStdHandle(STD_INPUT_HANDLE); 
+    DWORD mode;
+    GetConsoleMode(hStdin, &mode);
+
+    if( !enable )
+        mode &= ~ENABLE_ECHO_INPUT;
+    else
+        mode |= ENABLE_ECHO_INPUT;
+
+    SetConsoleMode(hStdin, mode );
+
+#else
+    struct termios tty;
+    tcgetattr(STDIN_FILENO, &tty);
+    if( !enable )
+        tty.c_lflag &= ~ECHO;
+    else
+        tty.c_lflag |= ECHO;
+
+    (void) tcsetattr(STDIN_FILENO, TCSANOW, &tty);
+#endif
+}
+
 
 int main(int argc, char** argv){
     /**
@@ -40,19 +80,20 @@ int main(int argc, char** argv){
     int keySize;
     Interval* blocks;
     int blockCnt;
-    int operation = 0; // 0: encrypt  1: decrypt
+    int operation = OP_ENCR; 
 
     std::ifstream blockFile;
     std::stringstream blockStrBuf;
     int c; opterr = 0;
 
     struct option long_opt[] = {
-        {"file",          1, NULL, 'f'},
-        {"decrypt",       0, NULL, 'd'},
-        {"key-size",      1, NULL, 'k'},
-        {"source-blocks", 1, NULL, 'b'},
-        {"key-file",      1, NULL, 'K'},
-        {"block-file",    1, NULL, 'B'}
+        {"file",             1, NULL, 'f'},
+        {"decrypt",          0, NULL, 'd'},
+        {"key-size",         1, NULL, 'k'},
+        {"source-blocks",    1, NULL, 'b'},
+        {"key-file",         1, NULL, 'K'},
+        {"block-file",       1, NULL, 'B'},
+        {"decrypt-block-id", 1, NULL, 'i'}
     };
     const char *short_opt = "df:k:b:B:K:?";
     char *keySourceFile = NULL;
@@ -68,7 +109,7 @@ int main(int argc, char** argv){
             keySourceFile = optarg;
             break;
         case 'd':
-            operation = 1;
+            operation = OP_DECR;
             break;
         case 'B':
             blockFile.open(optarg);
@@ -121,11 +162,23 @@ int main(int argc, char** argv){
 
     std::fstream file;
     file.open(filePath, std::ios::binary | std::ios::in | std::ios::out);
-    
+
     KeyGen kgen(keySize, keySourceFile);
     unsigned char* key = (unsigned char*) malloc(sizeof(char) * keySize/8);
-    bool saveKey = (operation == 0) && (keySourceFile == NULL || strcmp(keySourceFile, "") == 0);
+    bool saveKey = (operation == OP_ENCR) && (keySourceFile == NULL || strcmp(keySourceFile, "") == 0);
 
+    std::string password = "";
+    if(keySourceFile == NULL){
+        //setStdinEcho(false);
+        std::cout << "No key source file was specified, please enter your password: ";
+        getline(std::cin, password);
+        if(password != ""){
+            kgen.setRandomGenSeed(password);
+        } else {
+            printf("Empty password, using default key generation\n");
+        }
+        setStdinEcho(true);
+    }
 
     std::ofstream keyFile;
 
@@ -144,7 +197,7 @@ int main(int argc, char** argv){
         
         unsigned char* encData;
         kgen.genNextKey(key);
-        encData = (operation == 0) ? aes.EncryptECB(fData, blkSz, key) : aes.DecryptECB(fData, blkSz, key);
+        encData = (operation == OP_ENCR) ? aes.EncryptECB(fData, blkSz, key) : aes.DecryptECB(fData, blkSz, key);
 
         if(saveKey) {
             keyFile.write((const char*)key, sizeof(char) * keySize/8);

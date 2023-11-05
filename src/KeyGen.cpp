@@ -24,7 +24,11 @@ KeyGen::KeyGen(int key_size, char* srcPath) : keySize(key_size){
     rbe.seed(time(NULL));
 }
 
-
+void KeyGen::setRandomGenSeed(std::string seed){
+    const char * cseed = seed.c_str();
+    std::seed_seq sseq(cseed, cseed+(seed.size()*sizeof(char)));
+    rbe.seed(sseq);
+}
 
 void KeyGen::genNextKey(unsigned char* dest){
     if(src.is_open()){
