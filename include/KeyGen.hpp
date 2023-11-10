@@ -1,3 +1,6 @@
+#ifndef _KEYGEN_HPP_
+#define _KEYGEN_HPP_
+
 #include <fstream>
 
 
@@ -16,3 +19,5 @@ class KeyGen {
         void genNextKey(unsigned char* dest);
 
 };
+
+#endif

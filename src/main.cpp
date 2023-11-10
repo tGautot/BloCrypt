@@ -186,6 +186,8 @@ int main(int argc, char** argv){
         keyFile.open("keys.store", std::ios::binary | std::ios::out);
     }
 
+    // Could be very good, need to study openmp a bit
+    // #pragma omp parallel for
     for(int blk = 0; blk < blockCnt; blk++){
         printf("Encrypting block %d of %d\n", blk+1, blockCnt); fflush(stdout);
         int blkStt = blocks[blk].stt, blkEnd = blocks[blk].end;
