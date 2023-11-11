@@ -2,6 +2,8 @@
 #include <getopt.h>
 #include <fstream>
 #include <sstream>
+#include <vector>
+#include <string>
 
 #ifdef WIN32
 #include <windows.h>
@@ -13,6 +15,7 @@
 
 #include "AES.hpp"
 #include "KeyGen.hpp"
+#include "MetaKey.hpp"
 
 
 #define OP_ENCR 0
@@ -52,7 +55,6 @@ void setStdinEcho(bool enable = true)
     (void) tcsetattr(STDIN_FILENO, TCSANOW, &tty);
 #endif
 }
-
 
 int main(int argc, char** argv){
     /**

@@ -7,6 +7,7 @@ MetaKey::MetaKey(uint64_t stt, uint64_t end, std::string name, uint8_t sz, char*
         std::cout << "ERROR::MetaKey::MetaKey() Cannot have name longer than 256 bytes" << std::endl;
         throw (name.size());
     }
+    key = (char*)malloc(sz*sizeof(char));
     for(int i = 0; i < sz; i++) key[i] = k[i];
 }
 
@@ -22,29 +23,28 @@ bool MetaKey::toFile(std::ofstream& f){
     return true;
 }
 
-MetaKey MetaKey::fromFile(std::ifstream& f){
-    uint64_t bs, be;
-    f.read((char*)&bs, sizeof(uint64_t));
-    f.read((char*)&be, sizeof(uint64_t));
+void MetaKey::fromFile(std::ifstream& f, MetaKey* dest){
+    f.read((char*)&(dest->blockStt), sizeof(uint64_t));
+    f.read((char*)&(dest->blockEnd), sizeof(uint64_t));
     
     uint8_t sz;
     f.read((char*)&sz, sizeof(uint8_t));
     char* name = (char*)malloc((sz+1) * sizeof(char));
     name[sz] = 0; // Make sure it is 0 terminated
     f.read(name, sz*sizeof(char));
-    std::string strName(name);
+    dest->blockName.assign(name);
 
-    uint8_t ks;
-    f.read((char*)&ks, sizeof(uint8_t));
-    char* key = (char*) malloc(ks*sizeof(char));
-    f.read(key, ks*sizeof(char));
-    return MetaKey(bs,be,strName,ks,key);
+    f.read((char*)&(dest->keySize), sizeof(uint8_t));
+    dest->key = (char*) malloc(dest->keySize*sizeof(char));
+    f.read(dest->key, dest->keySize*sizeof(char));
 }
 
-void MetaKey::MetaKeyVectorToFile(std::vector<MetaKey> keys, uint64_t n, std::ofstream& f){
+void MetaKey::MetaKeyVectorToFile(std::vector<MetaKey> keys, std::ofstream& f){
     //f.seekp(0, std::ios::beg);
+    uint64_t n = keys.size();
     f.write((char*)&n, sizeof(uint64_t));
     for(int i = 0; i < n; i++){
+        std::cout << "Writing metakey "<< i << " to file" << std::endl;
         keys[i].toFile(f);
     }
 }
@@ -54,7 +54,8 @@ std::vector<MetaKey> MetaKey::FileToMetaKeyVector(std::ifstream& f){
     f.read((char*)&n, sizeof(uint64_t));
     std::vector<MetaKey> vec(n);
     for(int i = 0; i < n; i++){
-        vec[i] = MetaKey::fromFile(f);
+        vec[i] = MetaKey();
+        MetaKey::fromFile(f, &vec[i]);
     }
     return vec;
 }

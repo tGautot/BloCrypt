@@ -12,7 +12,7 @@
  * As well as metadata about block
  */
 class MetaKey {
-    private:
+    public:
     uint64_t blockStt, blockEnd;
     std::string blockName;
     uint8_t keySize; // in bytes
@@ -24,9 +24,9 @@ class MetaKey {
 
 
     bool toFile(std::ofstream& f);
+    static void fromFile(std::ifstream& f, MetaKey* mk);
 
-    static MetaKey fromFile(std::ifstream& f);
-    static void     MetaKeyVectorToFile(std::vector<MetaKey> keys, uint64_t n, std::ofstream& f);
+    static void     MetaKeyVectorToFile(std::vector<MetaKey> keys, std::ofstream& f);
     static std::vector<MetaKey> FileToMetaKeyVector(std::ifstream& f);
 
     // Mainly for tests

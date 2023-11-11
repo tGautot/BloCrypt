@@ -18,7 +18,9 @@ if(WITH_TESTS)
     if(Boost_FOUND)
         include_directories(${Boost_INCLUDE_DIRS}) 
         FILE(GLOB AllTests tests/*.cpp)
-        add_executable( BloTests WIN32 src/KeyGen.cpp src/AES.cpp ${AllTests} )
+        FILE(GLOB_RECURSE AllCPPSources src/*.cpp)
+        list(REMOVE_ITEM AllCPPSources ${PROJECT_SOURCE_DIR}/src/main.cpp)
+        add_executable( BloTests WIN32 ${AllCPPSources} ${AllTests} )
         target_include_directories( BloTests PUBLIC ./include  )
         target_link_libraries(BloTests ${Boost_FILESYSTEM_LIBRARY}
                                        ${Boost_SYSTEM_LIBRARY}
