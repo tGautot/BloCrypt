@@ -34,3 +34,11 @@ BNS: BlockNameSize; number of bytes for block's name
 ## Tests
  You can find tests in the `tests` folder, make sure you have boost installed as it is required for the tests. On ubuntu you can install boost via:
  > sudo apt-get install libboost-all-dev
+
+## TODO
+- [x] Block names
+- [x] Block Metadata
+- [x] Key file format
+- [ ] Key utility
+- [ ] Add Mac
+- [ ] Don't decrypt in place

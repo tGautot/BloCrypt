@@ -16,15 +16,17 @@
 #include "AES.hpp"
 #include "KeyGen.hpp"
 #include "MetaKey.hpp"
+#include "utils.hpp"
 
 
 #define OP_ENCR 0
 #define OP_DECR 1
 
-typedef struct {int stt, end;} Interval;
+typedef struct {int stt, end; std::string name;} Interval;
 
 void printArgHelp(){
     std::cout << "ArgHelp" << std::endl;
+    // TODO
 }
 
 
@@ -54,6 +56,61 @@ void setStdinEcho(bool enable = true)
 
     (void) tcsetattr(STDIN_FILENO, TCSANOW, &tty);
 #endif
+}
+
+Interval* parseBlockString(char* s, int* n){
+    int clnCnt;
+    printf("Parsing blocks in %s\n", s);
+    for(clnCnt=0; s[clnCnt]; s[clnCnt]==':'?clnCnt++:*s++); // count occurences of ":" in the string
+    *n = clnCnt+1;
+    printf("Found %d blocks\n", *n);
+    Interval* blocks = (Interval*)malloc((*n)*sizeof(Interval));
+    s = optarg;
+    char* tok = s;
+    
+    for(int intrvl = 0;; intrvl++) {
+        //printf("AAA, %s\n", tok);
+        int ofst = 0;
+        while(tok[ofst] != '-' && tok[ofst] != 0){ofst++;} // Go to next '-'
+        if(tok[ofst] == 0) {
+            //printf("Big oopsie\n");
+            FATAL("Error while parsing blocks, missing block's end", 1);
+        }
+        tok[ofst] = 0;
+        blocks[intrvl].stt = atoi(tok);
+
+        tok = tok + ofst + 1; ofst = 0;
+        //printf("BBB, %s\n", tok);
+        while(tok[ofst] != '-' && tok[ofst] != ':' && tok[ofst] != 0){ofst++;} // Go to next '-' or ':'
+        char nxtDelim = tok[ofst];
+        tok[ofst] = 0;
+        blocks[intrvl].end = atoi(tok);
+        tok = tok + ofst + 1; ofst = 0;
+        
+        //printf("CCC, %s\n", tok);
+        if(nxtDelim == 0){
+            // Cant do assignment instantly, causes sigsev
+            std::string intrvlStr = std::to_string(intrvl);
+            blocks[intrvl].name = intrvlStr;
+            return blocks; }
+    
+        
+        if(nxtDelim == ':'){ 
+            // Cant do assignment instantly, causes sigsev
+            std::string intrvlStr = std::to_string(intrvl);
+            blocks[intrvl].name = intrvlStr;
+            
+            continue; }
+        
+
+        //printf("DDD, %s\n", tok);
+        while(tok[ofst] != ':' && tok[ofst] != 0){ofst++;} // Go to next  ':'        
+        tok[ofst] = 0;
+        blocks[intrvl].name.assign(tok);
+        tok = tok + ofst + 1;
+
+    }
+    return blocks;
 }
 
 int main(int argc, char** argv){
@@ -95,7 +152,8 @@ int main(int argc, char** argv){
         {"source-blocks",    1, NULL, 'b'},
         {"key-file",         1, NULL, 'K'},
         {"block-file",       1, NULL, 'B'},
-        {"decrypt-block-id", 1, NULL, 'i'}
+        {"decrypt-block-id", 1, NULL, 'i'},
+        {"print-metadata",   0, NULL, 'p'}
     };
     const char *short_opt = "df:k:b:B:K:?";
     char *keySourceFile = NULL;
@@ -120,20 +178,8 @@ int main(int argc, char** argv){
             // no break, Let it go through
         case 'b': {
             char *s = optarg; int clnCnt;
-            printf("Parsing blocks in %s\n", s);
-            for(clnCnt=0; s[clnCnt]; s[clnCnt]==':'?clnCnt++:*s++); // count occurences of ":" in the string
-            blockCnt = clnCnt+1;
-            blocks = (Interval*)malloc(blockCnt*sizeof(Interval));
-            s = optarg;
-            char* tok = strtok(s, "-:");
-            int intrvl = 0;
-            do {
-                blocks[intrvl].stt = atoi(tok);
-                tok = strtok(NULL, "-:");
-                blocks[intrvl].end = atoi(tok);
-                tok = strtok(NULL, "-:");
-                intrvl++;
-            } while(tok != NULL);
+            blocks = parseBlockString(s, &blockCnt);
+            printf("Parsing finished, found %d blocks\n", blockCnt);
             break; }
         case '?':
             printArgHelp();
@@ -148,9 +194,10 @@ int main(int argc, char** argv){
     AES aes(keySize);
 
     // Check all blocks before encrypting
+    printf("Pre-checking all %d blocks\n", blockCnt);
     for(int blk = 0; blk < blockCnt; blk++){
         int blkStt = blocks[blk].stt, blkEnd = blocks[blk].end;
-        printf("Got block from %d to %d\n", blocks[blk].stt, blocks[blk].end);
+        printf("Got block from %d to %d (%s)\n", blocks[blk].stt, blocks[blk].end, blocks[blk].name.c_str());
         if(blkEnd < blkStt) {
             printf("Invalid block (end<start): %d-%d", blkStt, blkEnd);
             exit(1);
@@ -160,6 +207,7 @@ int main(int argc, char** argv){
             exit(1);
         }
     }
+    return 0;
 
 
     std::fstream file;
