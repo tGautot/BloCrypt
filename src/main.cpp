@@ -69,44 +69,42 @@ Interval* parseBlockString(char* s, int* n){
     char* tok = s;
     
     for(int intrvl = 0;; intrvl++) {
-        //printf("AAA, %s\n", tok);
         int ofst = 0;
         while(tok[ofst] != '-' && tok[ofst] != 0){ofst++;} // Go to next '-'
         if(tok[ofst] == 0) {
-            //printf("Big oopsie\n");
             FATAL("Error while parsing blocks, missing block's end", 1);
         }
         tok[ofst] = 0;
         blocks[intrvl].stt = atoi(tok);
 
         tok = tok + ofst + 1; ofst = 0;
-        //printf("BBB, %s\n", tok);
         while(tok[ofst] != '-' && tok[ofst] != ':' && tok[ofst] != 0){ofst++;} // Go to next '-' or ':'
         char nxtDelim = tok[ofst];
         tok[ofst] = 0;
         blocks[intrvl].end = atoi(tok);
         tok = tok + ofst + 1; ofst = 0;
         
-        //printf("CCC, %s\n", tok);
         if(nxtDelim == 0){
-            // Cant do assignment instantly, causes sigsev
+            // Cant do assignment instantly, causes sigsev, dunno why
             std::string intrvlStr = std::to_string(intrvl);
             blocks[intrvl].name = intrvlStr;
             return blocks; }
     
         
         if(nxtDelim == ':'){ 
-            // Cant do assignment instantly, causes sigsev
+            // Cant do assignment instantly, causes sigsev, dunno why
             std::string intrvlStr = std::to_string(intrvl);
             blocks[intrvl].name = intrvlStr;
-            
             continue; }
         
 
-        //printf("DDD, %s\n", tok);
         while(tok[ofst] != ':' && tok[ofst] != 0){ofst++;} // Go to next  ':'        
+        nxtDelim = tok[ofst];
         tok[ofst] = 0;
         blocks[intrvl].name.assign(tok);
+        
+        if(nxtDelim == 0) return blocks;
+        
         tok = tok + ofst + 1;
 
     }
