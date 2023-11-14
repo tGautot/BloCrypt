@@ -19,12 +19,13 @@ class MetaKey {
     char* key;
 
     public:
-    MetaKey(){}
+    MetaKey(){key = NULL;}
     MetaKey(uint64_t stt, uint64_t end, std::string name, uint8_t sz, char* k );
 
+    void setKey(uint8_t keySz, char* newKey);
 
-    bool toFile(std::ofstream& f);
-    static void fromFile(std::ifstream& f, MetaKey* mk);
+    bool toFile(std::ostream& f);
+    static bool fromFile(std::istream& f, MetaKey* mk);
 
     static void     MetaKeyVectorToFile(std::vector<MetaKey> keys, std::ofstream& f);
     static std::vector<MetaKey> FileToMetaKeyVector(std::ifstream& f);

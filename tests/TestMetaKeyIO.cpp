@@ -20,7 +20,7 @@ BOOST_AUTO_TEST_CASE(metakey_IO) {
     std::ifstream inf("testfile_MetaKeyIO", std::ios::binary | std::ios::in);
     BOOST_CHECK_MESSAGE(inf.is_open(), "Failed to open MetaKey IO testfile");
     std::vector<MetaKey> decoded_mks = MetaKey::FileToMetaKeyVector(inf);
-    inf.close();
+
 
     BOOST_TEST_INFO("Bad number of keys decoded, expected " << mks.size() << " but got " << decoded_mks.size());
     BOOST_CHECK_EQUAL(decoded_mks.size(), mks.size());
@@ -44,6 +44,11 @@ BOOST_AUTO_TEST_CASE(metakey_IO) {
         
         }
     }
-    BOOST_TEST_MESSAGE("metakey IO test succeeded");
+    MetaKey tmp;
+    BOOST_TEST_INFO("Expected fromFile function to return false if called after all keys were read");
+    BOOST_CHECK(MetaKey::fromFile(inf, &tmp));
+    inf.close();
+
+    BOOST_TEST_MESSAGE("metakey IO test done");
 }
 

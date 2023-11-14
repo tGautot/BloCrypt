@@ -21,6 +21,7 @@
 
 #define OP_ENCR 0
 #define OP_DECR 1
+#define OP_PRT_MD 2
 
 typedef struct {int stt, end; std::string name;} Interval;
 
@@ -32,8 +33,7 @@ void printArgHelp(){
 
 // From
 // https://stackoverflow.com/questions/1413445/reading-a-password-from-stdcin
-void setStdinEcho(bool enable = true)
-{
+void setStdinEcho(bool enable = true){
 #ifdef WIN32
     HANDLE hStdin = GetStdHandle(STD_INPUT_HANDLE); 
     DWORD mode;
@@ -102,13 +102,161 @@ Interval* parseBlockString(char* s, int* n){
         nxtDelim = tok[ofst];
         tok[ofst] = 0;
         blocks[intrvl].name.assign(tok);
-        
+
         if(nxtDelim == 0) return blocks;
         
         tok = tok + ofst + 1;
 
     }
     return blocks;
+}
+
+unsigned char aes_iv[16] = {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
+
+void encrypt(char* filePath, char* keySourceFile, int keySize, Interval* blocks, uint64_t blockCnt){
+    std::cout << "Started encryption" << std::endl;
+    // If no key source file was given, will generate keys randomly,
+    // and save them as MetaKey to file for later decryption 
+    bool saveKey = (keySourceFile == NULL || strcmp(keySourceFile, "") == 0);
+
+    if( !((!saveKey) ^ (blocks!=NULL)) ){ // Block info can only come from blocks var (x)or MetaKey file, not both
+        FATAL("Calling encrypt method with both key sourcefile and blocks data (or none)", 1);
+    }
+    
+    KeyGen kgen(keySize);
+
+    std::string password = "";
+    if(saveKey){ // KeyGen will only be used if savekey is true
+        setStdinEcho(false);
+        std::cout << "No key source file was specified, please enter your password: ";
+        getline(std::cin, password);
+        if(password != ""){
+            kgen.setRandomGenSeed(password);
+        } else {
+            printf("Empty password, using default key generation\n");
+        }
+        setStdinEcho(true);
+    }
+
+
+    std::fstream file;
+    file.open(filePath, std::ios::binary | std::ios::in | std::ios::out);
+    
+    std::fstream keyFile;
+    if(saveKey){
+        keyFile.open("keys.store", std::ios::binary | std::ios::out);
+        if(!keyFile.is_open()) {FATAL("Failed to create file to store encryption keys", 1);}
+        keyFile.write((const char*)&blockCnt, sizeof(uint64_t));
+    } else {
+        keyFile.open(keySourceFile, std::ios::binary | std::ios::in);
+        if(!keyFile.is_open()) {FATAL("Failed to open key sourcefile", 1);}
+    }
+
+    MetaKey mk;
+
+    unsigned char* key = (unsigned char*) malloc(sizeof(char) * keySize/8);
+
+    // Could be very good, need to study openmp a bit
+    // #pragma omp parallel for
+    int blockKeySize;
+    for(uint64_t blk = 0; blk < blockCnt; blk++){
+        printf("Encrypting block %ld / %ld\n", blk+1, blockCnt); fflush(stdout);
+
+        if(saveKey){
+            kgen.genNextKey(key);
+    
+            mk.blockStt = blocks[blk].stt;
+            mk.blockEnd = blocks[blk].end;
+            mk.blockName.assign(blocks[blk].name);
+            mk.setKey(keySize/8, (char*) key);
+        } else {
+            MetaKey::fromFile(keyFile, &mk);
+        }
+
+        blockKeySize = mk.keySize*8;
+        int blkSz = mk.blockEnd - mk.blockStt;
+        unsigned char fData[blkSz];
+        
+        file.seekg(mk.blockStt, std::ios::beg);
+        file.read((char*)fData, blkSz*sizeof(char));
+        
+        unsigned char* encData;
+
+        AES aes(blockKeySize);
+        encData = aes.EncryptCBC(fData, blkSz, key, aes_iv);
+
+        if(saveKey) {
+            mk.toFile(keyFile);
+        }
+
+        file.seekp(blocks[blk].stt, std::ios::beg);
+        file.write((char*)encData, blkSz*sizeof(char));
+    }
+
+    file.close();
+    keyFile.close();
+    free(key);
+    if(saveKey) {
+        printf("============================================\n");
+        printf("THE KEYS USED TO ENCRYPT YOUR DATA HAVE BEEN\n");
+        printf("SAVED TO THE FILE \"keys.store\" DON'T LOSE IT\n");
+        printf("============================================\n");
+        fflush(stdout);
+    }
+}
+
+void decrypt(char* filePath, char* keySourceFile){
+    std::cout << "Starting decryption" << std::endl;
+
+    std::fstream keyFile(keySourceFile, std::ios::binary | std::ios::in), file(filePath, std::ios::binary | std::ios::in | std::ios::out);
+    MetaKey mk;
+    int blockKeySize;
+    uint64_t blockCnt;
+    keyFile.read((char*)&blockCnt, sizeof(uint64_t)); 
+    for(uint64_t blk = 0; blk < blockCnt; blk++){
+        bool res = MetaKey::fromFile(keyFile, &mk);
+        if(!res) break;
+        printf("Decrypting block %s (%ld / %ld)\n", mk.blockName.c_str(), blk, blockCnt); fflush(stdout);
+
+
+        blockKeySize = mk.keySize*8;
+        int blkSz = mk.blockEnd - mk.blockStt;
+        unsigned char fData[blkSz];
+        
+        file.seekg(mk.blockStt, std::ios::beg);
+        file.read((char*)fData, blkSz*sizeof(char));
+        
+        unsigned char* encData;
+
+        AES aes(blockKeySize);
+        encData = aes.DecryptCBC(fData, blkSz, (unsigned char*) mk.key, aes_iv);
+
+
+        file.seekp(mk.blockStt, std::ios::beg);
+        file.write((char*)encData, blkSz*sizeof(char));
+    }
+}
+
+void printMetaData(char* keySourceFile){
+    bool nothing = (keySourceFile == NULL || strcmp(keySourceFile, "") == 0);
+    if(nothing){
+        printf("Please provide a KeyStore file\n");
+        return;
+    }
+    std::fstream keyFile(keySourceFile, std::ios::binary | std::ios::in);
+    uint64_t blockCnt;
+    keyFile.read((char*)&blockCnt, sizeof(uint64_t)); 
+    printf("KeyStore file contains keys for %ld blocks\n", blockCnt);
+    MetaKey mk;
+    for(int i = 0; i < blockCnt; i++){
+        bool res = MetaKey::fromFile(keyFile, &mk);
+        if(!res) {FATAL("Reached end of key file before advertised",1);}
+        printf("==========================================================\n");
+        printf("\tBlock name          : %s\n", mk.blockName.c_str());
+        printf("\tBlock starts at byte: %ld\n", mk.blockStt);
+        printf("\tBlock ends   at byte: %ld\n", mk.blockEnd);
+        printf("\tBlock's key size    : %d (bytes)\n" , mk.keySize); 
+    }
 }
 
 int main(int argc, char** argv){
@@ -123,7 +271,7 @@ int main(int argc, char** argv){
      * --key-size -k (128 | 192 | 256)
      *      Key size for AES
      * 
-     * --source-blocks -b expected format: [0-9]+-[0-9]+(:[0-9]+-[0-9]+)*
+     * --source-blocks -b expected format: [0-9]+-[0-9]+(-[A-Z]*)?(:[0-9]+-[0-9]+(-[A-Z]*)?)*
      *      Gives the offset in bytes from begining of inputfile for [start-end[ of data to encrypt
      * 
      * --key-file -K path_to_file 
@@ -134,9 +282,9 @@ int main(int argc, char** argv){
     */
 
     char* filePath;
-    int keySize;
-    Interval* blocks;
-    int blockCnt;
+    int keySize = 256;
+    Interval* blocks = NULL;
+    int blockCnt = 0;
     int operation = OP_ENCR; 
 
     std::ifstream blockFile;
@@ -153,7 +301,7 @@ int main(int argc, char** argv){
         {"decrypt-block-id", 1, NULL, 'i'},
         {"print-metadata",   0, NULL, 'p'}
     };
-    const char *short_opt = "df:k:b:B:K:?";
+    const char *short_opt = "pdf:k:b:B:K:?";
     char *keySourceFile = NULL;
     while ((c = getopt_long(argc, argv, short_opt, long_opt, NULL)) != -1){
         switch (c)  {
@@ -179,17 +327,22 @@ int main(int argc, char** argv){
             blocks = parseBlockString(s, &blockCnt);
             printf("Parsing finished, found %d blocks\n", blockCnt);
             break; }
+        case 'p':
+            operation = OP_PRT_MD;
+            break;
         case '?':
             printArgHelp();
-            return 1;
+            return 0;
         default:
             abort ();
         }
     }
+    if(operation == OP_PRT_MD) {
+        printMetaData(keySourceFile);
+        return 0;
+    }
 
     if(blockFile.is_open()) blockFile.close();
-
-    AES aes(keySize);
 
     // Check all blocks before encrypting
     printf("Pre-checking all %d blocks\n", blockCnt);
@@ -205,68 +358,10 @@ int main(int argc, char** argv){
             exit(1);
         }
     }
-    return 0;
 
+    if(operation == OP_ENCR) encrypt(filePath, keySourceFile, keySize, blocks, blockCnt);
+    else                     decrypt(filePath, keySourceFile);
 
-    std::fstream file;
-    file.open(filePath, std::ios::binary | std::ios::in | std::ios::out);
-
-    KeyGen kgen(keySize, keySourceFile);
-    unsigned char* key = (unsigned char*) malloc(sizeof(char) * keySize/8);
-    bool saveKey = (operation == OP_ENCR) && (keySourceFile == NULL || strcmp(keySourceFile, "") == 0);
-
-    std::string password = "";
-    if(keySourceFile == NULL){
-        //setStdinEcho(false);
-        std::cout << "No key source file was specified, please enter your password: ";
-        getline(std::cin, password);
-        if(password != ""){
-            kgen.setRandomGenSeed(password);
-        } else {
-            printf("Empty password, using default key generation\n");
-        }
-        setStdinEcho(true);
-    }
-
-    std::ofstream keyFile;
-
-    if(saveKey){
-        keyFile.open("keys.store", std::ios::binary | std::ios::out);
-    }
-
-    // Could be very good, need to study openmp a bit
-    // #pragma omp parallel for
-    for(int blk = 0; blk < blockCnt; blk++){
-        printf("Encrypting block %d of %d\n", blk+1, blockCnt); fflush(stdout);
-        int blkStt = blocks[blk].stt, blkEnd = blocks[blk].end;
-        int blkSz = blkEnd - blkStt;
-        unsigned char fData[blkSz];
-        
-        file.seekg(blkStt, std::ios::beg);
-        file.read((char*)fData, blkSz*sizeof(char));
-        
-        unsigned char* encData;
-        kgen.genNextKey(key);
-        encData = (operation == OP_ENCR) ? aes.EncryptECB(fData, blkSz, key) : aes.DecryptECB(fData, blkSz, key);
-
-        if(saveKey) {
-            keyFile.write((const char*)key, sizeof(char) * keySize/8);
-        }
-
-        file.seekp(blkStt, std::ios::beg);
-        file.write((char*)encData, blkSz*sizeof(char));
-    }
-
-    file.close();
-    if(saveKey) {
-        keyFile.close();
-        printf("============================================\n");
-        printf("THE KEYS USED TO ENCRYPT YOUR DATA HAVE BEEN\n");
-        printf("SAVED TO THE FILE \"keys.store\" DON'T LOSE IT\n");
-        printf("============================================\n");
-        fflush(stdout);
-    }
-    free(key);
     free(blocks);
 
 

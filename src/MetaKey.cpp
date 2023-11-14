@@ -11,7 +11,16 @@ MetaKey::MetaKey(uint64_t stt, uint64_t end, std::string name, uint8_t sz, char*
     for(int i = 0; i < sz; i++) key[i] = k[i];
 }
 
-bool MetaKey::toFile(std::ofstream& f){
+void MetaKey::setKey(uint8_t sz, char* k){
+    if(key != NULL && sz != keySize) { free(key); key = NULL;}
+    
+    if(key == NULL)
+        key = (char*)malloc(sz*sizeof(char));
+    keySize = sz;
+    for(int i = 0; i < sz; i++) key[i] = k[i];
+}
+
+bool MetaKey::toFile(std::ostream& f){
     f.write((char*)&blockStt, sizeof(uint64_t));
     f.write((char*)&blockEnd, sizeof(uint64_t));
     uint8_t sz = blockName.size();
@@ -23,7 +32,8 @@ bool MetaKey::toFile(std::ofstream& f){
     return true;
 }
 
-void MetaKey::fromFile(std::ifstream& f, MetaKey* dest){
+bool MetaKey::fromFile(std::istream& f, MetaKey* dest){
+    if(f.eof()) return false;
     f.read((char*)&(dest->blockStt), sizeof(uint64_t));
     f.read((char*)&(dest->blockEnd), sizeof(uint64_t));
     
@@ -35,8 +45,10 @@ void MetaKey::fromFile(std::ifstream& f, MetaKey* dest){
     dest->blockName.assign(name);
 
     f.read((char*)&(dest->keySize), sizeof(uint8_t));
+    if(dest->key != NULL) free(dest->key);
     dest->key = (char*) malloc(dest->keySize*sizeof(char));
     f.read(dest->key, dest->keySize*sizeof(char));
+    return true;
 }
 
 void MetaKey::MetaKeyVectorToFile(std::vector<MetaKey> keys, std::ofstream& f){
